@@ -33,7 +33,9 @@ func NewOvsSet(goSlice interface{}) (*OvsSet, error) {
 
 // MarshalJSON wil marshal an OVSDB style set in to a JSON byte array
 func (o OvsSet) MarshalJSON() ([]byte, error) {
-	if len(o.GoSet) > 0 {
+	if len(o.GoSet) == 1 {
+		return json.Marshal(o.GoSet[0])
+	} else if len(o.GoSet) > 1 {
 		var oSet []interface{}
 		oSet = append(oSet, "set")
 		oSet = append(oSet, o.GoSet)
@@ -44,14 +46,26 @@ func (o OvsSet) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON will unmarshal a JSON byte array to an OVSDB style set
 func (o *OvsSet) UnmarshalJSON(b []byte) (err error) {
-	var oSet []interface{}
-	if err = json.Unmarshal(b, &oSet); err == nil && len(oSet) > 1 {
+	var inter interface{}
+	if err = json.Unmarshal(b, &inter); err != nil {
+		return err
+	}
+	switch inter.(type) {
+	case []interface{}:
+		var oSet []interface{}
+		oSet = inter.([]interface{})
 		innerSet := oSet[1].([]interface{})
 		for _, val := range innerSet {
 			goVal, err := ovsSliceToGoNotation(val)
 			if err == nil {
 				o.GoSet = append(o.GoSet, goVal)
 			}
+		}
+	default:
+		// it is a single object
+		goVal, err := ovsSliceToGoNotation(inter)
+		if err == nil {
+			o.GoSet = append(o.GoSet, goVal)
 		}
 	}
 	return err

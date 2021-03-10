@@ -13,6 +13,8 @@ import (
 
 func getElemFromString(s string)(interface{} ,error){
 
+	setPrefix := `["set",[`
+	mapPrefix := `["map",[`
 	var getElem  func(s string)(interface{},error)
 	hasDoubleQuotationMark := func(s string)bool{
 		return strings.HasPrefix(s,`"`) && strings.HasSuffix(s,`"`)
@@ -22,6 +24,53 @@ func getElemFromString(s string)(interface{} ,error){
 		res := strings.TrimPrefix(s,`"`)
 		res = strings.TrimSuffix(res,`"`)
 		return res
+	}
+	split := func(s string)([]string,error){
+		/*
+		isSet :=false
+		isMap :=false
+		if strings.HasPrefix(s,setPrefix) {
+			isSet = true
+			s = strings.TrimPrefix(s,setPrefix)
+		}else if strings.HasPrefix(s,mapPrefix) {
+			isMap = true
+			s = strings.TrimPrefix(s,mapPrefix)
+		}else if strings.HasPrefix(s,mapPrefix) {
+		}else {
+			nil,errors.New("error split")
+		}
+		s=strings.TrimSuffix(s,`]]`)
+		 */
+
+		res := []string{}
+		bracketCounter := 0
+		l := len(s)
+		for i:=0 ; i < l ; i++{
+			if(string(s[i]) == `[`) {
+				bracketCounter++
+			} else if(string(s[i]) == `]`) {
+				bracketCounter--
+			} else if(string(s[i]) ==`,` && bracketCounter>0) {
+				s= s[:i]+`~`+s[i+1:]
+			}
+		}
+		res = strings.Split(s,`,`)
+		for i := range(res) {
+			if (strings.HasPrefix(res[i],setPrefix)||
+				strings.HasPrefix(res[i],mapPrefix)) {
+				res[i] = strings.Replace(res[i],`~`,`,`,-1)
+			}
+		}
+		return res,nil
+	}
+
+	splitAndsort := func(s string)([]string,error){
+		res,err := split(s)
+		if err != nil{
+			return nil, err
+		}
+		sort.Strings(res)
+		return res,nil
 	}
 
 	getElemFromMap := func(s string)(map[interface{}]interface{},error){
@@ -34,7 +83,11 @@ func getElemFromString(s string)(interface{} ,error){
 			return map[interface{}]interface{}{},errors.New(s+"is not a map")
 		}
 		s= s[1:len(s)-1] //remove outer `[` `]`
-		list := strings.Split(s,`],[`)
+		//list := strings.Split(s,`],[`)
+		list,err := splitAndsort(s)
+		if err!=nil{
+			return nil, err
+		}
 		for _,elem := range(list){
 			keyval := strings.Split(elem,`,`)
 			if len(keyval) != 2{
@@ -65,7 +118,11 @@ func getElemFromString(s string)(interface{} ,error){
 		}
 		s= s[1:len(s)-1] //remove outer `[` `]`
 		*/
-		list := strings.Split(s,`,`) //TODO think how to make it smarter split
+		list,err := splitAndsort(s)
+		if err!=nil{
+			return nil, err
+		}
+		//list := strings.Split(s,`,`) //TODO think how to make it smarter split!
 		//sort.Slice(list) //FIXME ADD SORT HERE!!
 		sort.Strings(list)
 		for _,val := range(list){
@@ -78,8 +135,6 @@ func getElemFromString(s string)(interface{} ,error){
 		return r,nil
 	}
 	getElem = func(s string)(interface{},error){
-		setPrefix := `["set",[`
-		mapPrefix := `["map",[`
 		if(strings.HasPrefix(s,setPrefix)){
 			return getElemFromSet(s[len(setPrefix):len(s)-2])
 		}else if(strings.HasPrefix(s,mapPrefix)){
@@ -157,7 +212,8 @@ func TestOmerTmp2(t *testing.T) {
 
 	//s3 := `["set",["ac",["set",[["set",["ac","aa","bb"]],"bb","ac","aa"]],"bb","y"]]`
 	s3 :=`["set",["aa","bb"]]`
-	s4 := `["set",["bb","y","ac",["set",["ac","aa","bb",["set",["bb","ac","aa"]]]]]]`
+	//s4 := `["set",["bb","y","ac",["set",["ac","aa","bb",["set",["bb","ac","aa"]]]]]]`
+	s4 := `["set",["bb","y","ac",["set",["ac","aa","bb"]]]]`
 	//["set",["ac","aa","bb"]]
 	//["set",["bb","ac","aa"]]
 	a3,err:=getElemFromString(s3)

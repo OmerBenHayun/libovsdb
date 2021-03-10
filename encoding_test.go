@@ -3,7 +3,6 @@ package libovsdb
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sort"
@@ -59,7 +58,7 @@ var tests = []tuple{
 	{,`["set",[]]`},
 }
 */
-
+/*
 func jsonEq(t *testing.T,str1 string,str2 string) {
 	_,eq := jsonEqReq(t,str1,str2,false,false)
 	if !eq{
@@ -95,11 +94,9 @@ func jsonEqReq(t *testing.T,str1 string,str2 string,isMap bool,isSet bool)(strin
 		}
 		innerListStr := s[1:len(s)-1]
 		list := strings.Split(innerListStr,`,`)
-		/*
-		if len(list)==1{
-			return `[` +list[0]+ `]`
-		}
-		*/
+		//if len(list)==1{
+		//	return `[` +list[0]+ `]`
+		//}
 		sort.Strings(list)
 		res:=list[0]
 		for _ ,elem :=range list[1:]{
@@ -109,13 +106,11 @@ func jsonEqReq(t *testing.T,str1 string,str2 string,isMap bool,isSet bool)(strin
 	}
 
 	//uncomment after debugg
-	/*
-	const setPrefix = `["set",[`
-	const mapPrefix = `["map",[`
-	const shouldEqualMsg = "they should be equal\n"
-	const setPrefixLen = len(setPrefix)
-	const mapPrefixLen = len(mapPrefix)
-	*/
+	//const setPrefix = `["set",[`
+	//const mapPrefix = `["map",[`
+	//const shouldEqualMsg = "they should be equal\n"
+	//const setPrefixLen = len(setPrefix)
+	//const mapPrefixLen = len(mapPrefix)
 	//non const for debug
 	setPrefix := `["set",[`
 	mapPrefix := `["map",[`
@@ -142,26 +137,32 @@ func jsonEqReq(t *testing.T,str1 string,str2 string,isMap bool,isSet bool)(strin
 	}
 	l := len(str1)
 	for i:=0 ; i < l ; i++{
-		if !inMapOrSet{
-			if str1[i] != str2[i]{
-				return "",false
-			}
-		}
-		if i <setPrefixLen || i< mapPrefixLen{
-			continue
-		}
+		//if (i <setPrefixLen || i< mapPrefixLen){
+		//	continue
+		//}
 		isEqual := true
 		var resStr string
-		if str1[i-setPrefixLen:i]==setPrefix {
-			resStr, isEqual = jsonEqReq(t,string(str1[i:]), string(str2[i:]), false, true)
-		}else if str1[i-mapPrefixLen:i]==mapPrefix{
-			resStr, isEqual = jsonEqReq(t,string(str1[i:]), string(str2[i:]), true, false)
+		if !(i <setPrefixLen) {
+			if str1[i-setPrefixLen:i]==setPrefix {
+				resStr, isEqual = jsonEqReq(t,string(str1[i:]), string(str2[i:]), false, true)
+			}
+		}
+		if !(i< mapPrefixLen){
+			if str1[i-mapPrefixLen:i]==mapPrefix {
+				resStr, isEqual = jsonEqReq(t, string(str1[i:]), string(str2[i:]), true, false)
+			}
 		}
 		if resStr != "" && isEqual{ //maybe find better condition
 			str1 = str1[0:i-setPrefixLen] + resStr+ str1[i+len(resStr):]
 			str2 = str2[0:i-setPrefixLen] + resStr+ str2[i+len(resStr):]
 			l = len(str1)
 			i=i+len(resStr)
+		}
+		//else we are not in map or set
+		if !inMapOrSet{
+			if str1[i] != str2[i]{
+				return "",false
+			}
 		}
 	}
 	if inMapOrSet{
@@ -183,7 +184,148 @@ func jsonEqReq(t *testing.T,str1 string,str2 string,isMap bool,isSet bool)(strin
 	}
 	return "",true
 }
+*/
 
+
+func toCanonicalForm(s string)(string,error){
+	setPrefix := `["set",[`
+	mapPrefix := `["map",[`
+	var res string
+	var err error
+	if(strings.HasPrefix(s,setPrefix)){
+		s = strings.TrimPrefix(s,setPrefix)
+		res,err = toCanonicalFormReq(s,false,true)
+		//res = setPrefix + res
+	}else if(strings.HasPrefix(s,mapPrefix)) {
+		s = strings.TrimPrefix(s,mapPrefix)
+		res,err = toCanonicalFormReq(s,true,false)
+		//res = mapPrefix + res
+	}
+	if err!=nil{
+		return "", err
+	}
+	res = strings.Replace(res,`~`,`,`,-1)
+
+	res = strings.Replace(res,`[`,`["set",[`,-1)
+	res = strings.Replace(res,`]`,`]`,-1)
+	return res,nil
+}
+
+func toCanonicalFormReq(s string,isMap bool,isSet bool)(string,error){
+	findTheCloseIdxForElement :=func(s string)(int,error){
+		squareBracketsBalance := 2
+		l := len(s)
+		for i:=0 ; i < l ; i++ {
+			switch string(s[i]){
+			case `[`:
+				squareBracketsBalance++
+			case `]`:
+				squareBracketsBalance--
+			}
+			if squareBracketsBalance==0{
+				return i,nil
+			}
+		}
+		return 0,errors.New("error at findTheCloseIdxForElement" )
+	}
+	sortList := func(s string)string{
+		//recive a json list and sort it ass
+		if string(s[0]) != `[` || string(s[len(s)-1]) != `]`{
+			panic(`not a valid json list`) // FIXME change this afterword to normal error
+			//require.Error(t,errors.New(`not a valid json list`))
+			//return "" //we should not get here
+		}
+		innerListStr := s[1:len(s)-1]
+		list := strings.Split(innerListStr,`,`)
+		//if len(list)==1{
+		//	return `[` +list[0]+ `]`
+		//}
+		sort.Strings(list)
+		res:=list[0]
+		for _ ,elem :=range list[1:]{
+			res += `~`+elem
+		}
+		return `[` +res+ `]`
+	}
+	//uncomment after debugg
+	//const setPrefix = `["set",[`
+	//const mapPrefix = `["map",[`
+	//const shouldEqualMsg = "they should be equal\n"
+	//const setPrefixLen = len(setPrefix)
+	//const mapPrefixLen = len(mapPrefix)
+	//non const for debug
+	setPrefix := `["set",[`
+	mapPrefix := `["map",[`
+	setPrefixLen := len(setPrefix)
+	mapPrefixLen := len(mapPrefix)
+	inMapOrSet := isSet || isMap
+
+	if isMap && isSet{
+		return "",errors.New(`cannot be set and map on the same time`)
+	}//TODO remove the panic in the future and find better alternative
+	if inMapOrSet{ //TODO make code more elegant
+		//buid
+		e ,err:= findTheCloseIdxForElement(s)
+		if err != nil{
+			return "", err
+		}
+		s = s[:e-1]
+		//now we will take care inner sets or maps
+	}
+	l := len(s)
+	var resStr string
+	//var offset int
+	var err error
+	for i:=0 ; i < l ; i++ {
+		resStr = ""
+		if !(i <setPrefixLen) {
+			if s[i-setPrefixLen:i]==setPrefix {
+				//offset = setPrefixLen
+				resStr,err = toCanonicalFormReq(s[i:] ,false ,true)
+				if err !=nil{
+					return "", err
+				}
+			}
+		}
+		if !(i< mapPrefixLen){
+			if s[i-mapPrefixLen:i]==mapPrefix {
+				//offset = mapPrefixLen
+				resStr,err = toCanonicalFormReq(s[i:] ,true ,false)
+				if err !=nil{
+					return "", err
+				}
+			}
+		}
+		if resStr != "" { //maybe find better condition
+			//offset := 0
+			//if(strings.HasPrefix(s,setPrefix)){
+			//	offset+=setPrefixLen
+			//}else if(strings.HasPrefix(s,mapPrefix)){
+			//	offset+=mapPrefixLen
+			//}
+			s = s[0:i-setPrefixLen] + resStr+ s[i+len(resStr):]
+			//TODO can be optimized
+			l = len(s)
+			i=len(s[0:i-setPrefixLen] + resStr)
+		}
+	}
+	if inMapOrSet{
+		if isSet{
+			s = sortList(`[` +s +`]`)
+			return s,nil
+		}else {
+			//is map FIXME add here
+			//str1 = `{` +str1 +`}`
+			//str2 = `{` +str2 +`}`
+			////TODO need to add more string proccessing to be equal to map
+			//assert.JSONEqf(t, str1, str2,shouldEqualMsg)
+			//return str1,true
+
+		}
+	}
+	s = strings.Replace(s,`~`,`,`,-1)
+	return s , nil
+}
 
 //omer test tmp
 func TestOmerTmp2(t *testing.T) {
@@ -193,24 +335,41 @@ func TestOmerTmp2(t *testing.T) {
 	//jsonStr, err := json.Marshal(ovsSet)
 	//assert.Nil(t, err)
 	//expected := "[\"set\",[\"aa\",\"bb\"]]"
-	s1 := `["set",["aa","bb"]]`
-	s2 := `["set",["bb","aa"]]`
 
-	jsonEq(t,s1,s2)
+	//s1 := `["set",["aa","bb"]]`
+	//s2 := `["set",["bb","aa"]]`
 
-	s1 = `["set",["ac","aa","bb"]]`
-	s2 = `["set",["bb","ac","aa"]]`
+	//jsonEq(t,s1,s2)
 
-	//require.JSONEqf(t, expected, string(jsonStr), "they should be equal\n")
-	jsonEq(t,s1,s2)
+	//s1 = `["set",["ac","aa","bb"]]`
+	//s2 = `["set",["bb","ac","aa"]]`
+
+	////require.JSONEqf(t, expected, string(jsonStr), "they should be equal\n")
+	//jsonEq(t,s1,s2)
 
 
-	s1 = `["set",["ac",["set",["aa","bb"]],"aa","bb"]]`
-	s2 = `["set",[["set",["bb","aa"]],"bb","ac","aa"]]`
+	s0 := `["set",["ac","aa","bb",["set",["aa","bb"]]]]`
+	s1 := `["set",["ac",["set",["aa","bb"]],"aa","bb"]]`
+	s2 := `["set",[["set",["bb","aa"]],"bb","ac","aa"]]`
 	//TODO this should pass
-
+	a0,err:=toCanonicalForm(s0)
+	if err!=nil{
+		print(err)
+	}
+	a1,err:=toCanonicalForm(s1)
+	if err!=nil{
+		print(err)
+	}
+	a2,err:=toCanonicalForm(s2)
+	if err!=nil{
+		print(err)
+	}
+	print(a0)
+	print(a1)
+	print(a2)
+	print(a2)
 	//require.JSONEqf(t, expected, string(jsonStr), "they should be equal\n")
-	jsonEq(t,s1,s2)
+	//jsonEq(t,s1,s2)
 }
 /*
 //omer test tmp

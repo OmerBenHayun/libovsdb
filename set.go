@@ -18,15 +18,20 @@ type OvsSet struct {
 }
 
 // NewOvsSet creates a new OVSDB style set from a Go slice
-func NewOvsSet(goSlice interface{}) (*OvsSet, error) {
-	v := reflect.ValueOf(goSlice)
-	if v.Kind() != reflect.Slice {
-		return nil, errors.New("OvsSet supports only Go Slice types")
-	}
-
+func NewOvsSet(i interface{}) (*OvsSet, error) {
+	v := reflect.ValueOf(i)
 	var ovsSet []interface{}
-	for i := 0; i < v.Len(); i++ {
-		ovsSet = append(ovsSet, v.Index(i).Interface())
+	switch v.Kind() {
+	case reflect.Slice:
+		for i := 0; i < v.Len(); i++ {
+			ovsSet = append(ovsSet, v.Index(i).Interface())
+		}
+	case reflect.String:
+		ovsSet = append(ovsSet, v.Interface())
+	case reflect.ValueOf(UUID{}).Kind():
+		ovsSet = append(ovsSet, v.Interface())
+	default:
+		return nil, errors.New("OvsSet supports only Go Slice/string/uuid types")
 	}
 	return &OvsSet{ovsSet}, nil
 }
@@ -46,6 +51,13 @@ func (o OvsSet) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON will unmarshal a JSON byte array to an OVSDB style set
 func (o *OvsSet) UnmarshalJSON(b []byte) (err error) {
+	addToSet := func(o *OvsSet,v interface{}) {
+		goVal, err := ovsSliceToGoNotation(v)
+		if err == nil {
+			o.GoSet = append(o.GoSet, goVal)
+		}
+	}
+
 	var inter interface{}
 	if err = json.Unmarshal(b, &inter); err != nil {
 		return err
@@ -54,19 +66,25 @@ func (o *OvsSet) UnmarshalJSON(b []byte) (err error) {
 	case []interface{}:
 		var oSet []interface{}
 		oSet = inter.([]interface{})
-		innerSet := oSet[1].([]interface{})
-		for _, val := range innerSet {
-			goVal, err := ovsSliceToGoNotation(val)
-			if err == nil {
-				o.GoSet = append(o.GoSet, goVal)
+		switch  oSet[1].(type){
+		case []interface{}:
+			innerSet := oSet[1].([]interface{})
+			for _, val := range innerSet {
+				switch  val.(type){
+				case []interface{}:
+					// it is a uuid object
+					addToSet(o,UUID{GoUUID: val.([]interface{})[1].(string)})
+				default:
+					addToSet(o,val)
+				}
 			}
+		default:
+			// it is a single uuid object
+			addToSet(o, UUID{GoUUID: oSet[1].(string)})
 		}
 	default:
 		// it is a single object
-		goVal, err := ovsSliceToGoNotation(inter)
-		if err == nil {
-			o.GoSet = append(o.GoSet, goVal)
-		}
+		addToSet(o,inter)
 	}
 	return err
 }
